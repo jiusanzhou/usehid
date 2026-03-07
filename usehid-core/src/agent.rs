@@ -4,6 +4,7 @@
 
 use crate::error::{Error, Result};
 use crate::tween::Tween;
+use crate::accessibility::UIElement;
 use crate::{Device, Keyboard, Key, Modifiers, Mouse, MouseButton, Gamepad, GamepadButton};
 use serde::{Deserialize, Serialize};
 
@@ -79,6 +80,24 @@ pub enum AgentAction {
     GamepadLeftStick { x: u8, y: u8 },
     GamepadRightStick { x: u8, y: u8 },
     GamepadTriggers { left: u8, right: u8 },
+
+    // Screenshot actions
+    Screenshot,
+    ScreenshotRegion { x: i32, y: i32, width: u32, height: u32 },
+
+    // Accessibility actions
+    GetUiTree {
+        #[serde(default)]
+        depth: Option<u32>,
+        #[serde(default)]
+        app: Option<String>,
+    },
+    FindUiElement {
+        #[serde(default)]
+        role: Option<String>,
+        #[serde(default)]
+        title: Option<String>,
+    },
 }
 
 /// Result of an agent action
@@ -99,27 +118,45 @@ pub struct AgentResult {
     pub enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub triggered: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tree: Option<UIElement>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub elements: Option<Vec<UIElement>>,
 }
 
 impl AgentResult {
     fn ok() -> Self {
-        Self { success: true, error: None, x: None, y: None, width: None, height: None, enabled: None, triggered: None }
+        Self { success: true, error: None, x: None, y: None, width: None, height: None, enabled: None, triggered: None, data: None, tree: None, elements: None }
     }
-    
+
     fn err(msg: impl Into<String>) -> Self {
-        Self { success: false, error: Some(msg.into()), x: None, y: None, width: None, height: None, enabled: None, triggered: None }
+        Self { success: false, error: Some(msg.into()), x: None, y: None, width: None, height: None, enabled: None, triggered: None, data: None, tree: None, elements: None }
     }
-    
+
     fn with_position(x: i32, y: i32) -> Self {
-        Self { success: true, error: None, x: Some(x), y: Some(y), width: None, height: None, enabled: None, triggered: None }
+        Self { success: true, error: None, x: Some(x), y: Some(y), width: None, height: None, enabled: None, triggered: None, data: None, tree: None, elements: None }
     }
-    
+
     fn with_size(width: u32, height: u32) -> Self {
-        Self { success: true, error: None, x: None, y: None, width: Some(width), height: Some(height), enabled: None, triggered: None }
+        Self { success: true, error: None, x: None, y: None, width: Some(width), height: Some(height), enabled: None, triggered: None, data: None, tree: None, elements: None }
     }
-    
+
     fn with_failsafe_status(enabled: bool, triggered: bool) -> Self {
-        Self { success: true, error: None, x: None, y: None, width: None, height: None, enabled: Some(enabled), triggered: Some(triggered) }
+        Self { success: true, error: None, x: None, y: None, width: None, height: None, enabled: Some(enabled), triggered: Some(triggered), data: None, tree: None, elements: None }
+    }
+
+    fn with_data(data: String) -> Self {
+        Self { success: true, error: None, x: None, y: None, width: None, height: None, enabled: None, triggered: None, data: Some(data), tree: None, elements: None }
+    }
+
+    fn with_tree(tree: UIElement) -> Self {
+        Self { success: true, error: None, x: None, y: None, width: None, height: None, enabled: None, triggered: None, data: None, tree: Some(tree), elements: None }
+    }
+
+    fn with_elements(elements: Vec<UIElement>) -> Self {
+        Self { success: true, error: None, x: None, y: None, width: None, height: None, enabled: None, triggered: None, data: None, tree: None, elements: Some(elements) }
     }
 }
 
@@ -156,10 +193,12 @@ impl AgentHID {
     
     /// Execute an action
     pub fn execute(&mut self, action: AgentAction) -> AgentResult {
-        // Check failsafe before executing (except for failsafe control actions)
-        if !matches!(action, AgentAction::FailsafeEnable | AgentAction::FailsafeDisable | 
-                            AgentAction::FailsafeStatus | AgentAction::FailsafeReset | 
-                            AgentAction::Size | AgentAction::Position) {
+        // Check failsafe before executing (except for failsafe control actions and read-only queries)
+        if !matches!(action, AgentAction::FailsafeEnable | AgentAction::FailsafeDisable |
+                            AgentAction::FailsafeStatus | AgentAction::FailsafeReset |
+                            AgentAction::Size | AgentAction::Position |
+                            AgentAction::Screenshot | AgentAction::ScreenshotRegion { .. } |
+                            AgentAction::GetUiTree { .. } | AgentAction::FindUiElement { .. }) {
             if let Err(e) = crate::failsafe::check_failsafe_default() {
                 return AgentResult::err(format!("Failsafe: {}", e));
             }
@@ -214,6 +253,14 @@ impl AgentHID {
             AgentAction::GamepadLeftStick { x, y } => self.gamepad_left_stick(x, y),
             AgentAction::GamepadRightStick { x, y } => self.gamepad_right_stick(x, y),
             AgentAction::GamepadTriggers { left, right } => self.gamepad_triggers(left, right),
+
+            // Screenshot
+            AgentAction::Screenshot => self.take_screenshot(),
+            AgentAction::ScreenshotRegion { x, y, width, height } => self.take_screenshot_region(x, y, width, height),
+
+            // Accessibility
+            AgentAction::GetUiTree { depth, app } => self.get_ui_tree(depth, app),
+            AgentAction::FindUiElement { role, title } => self.find_ui_element(role, title),
         }
     }
     
@@ -689,6 +736,44 @@ impl AgentHID {
         let _ = self.mouse.release(btn);
         
         result
+    }
+
+    // Screenshot actions
+    fn take_screenshot(&self) -> AgentResult {
+        match crate::screenshot::screenshot() {
+            Ok(png_bytes) => {
+                use base64::Engine;
+                let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+                AgentResult::with_data(b64)
+            }
+            Err(e) => AgentResult::err(e.to_string()),
+        }
+    }
+
+    fn take_screenshot_region(&self, x: i32, y: i32, width: u32, height: u32) -> AgentResult {
+        match crate::screenshot::screenshot_region(x, y, width, height) {
+            Ok(png_bytes) => {
+                use base64::Engine;
+                let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+                AgentResult::with_data(b64)
+            }
+            Err(e) => AgentResult::err(e.to_string()),
+        }
+    }
+
+    // Accessibility actions
+    fn get_ui_tree(&self, depth: Option<u32>, app: Option<String>) -> AgentResult {
+        match crate::accessibility::get_ui_tree(depth, app.as_deref()) {
+            Ok(tree) => AgentResult::with_tree(tree),
+            Err(e) => AgentResult::err(e.to_string()),
+        }
+    }
+
+    fn find_ui_element(&self, role: Option<String>, title: Option<String>) -> AgentResult {
+        match crate::accessibility::find_ui_element(role.as_deref(), title.as_deref()) {
+            Ok(elements) => AgentResult::with_elements(elements),
+            Err(e) => AgentResult::err(e.to_string()),
+        }
     }
 }
 

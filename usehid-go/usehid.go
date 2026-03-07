@@ -246,8 +246,30 @@ type AgentHID struct {
 
 // AgentResult is the result of an agent action
 type AgentResult struct {
-	Success bool   `json:"success"`
-	Error   string `json:"error,omitempty"`
+	Success  bool        `json:"success"`
+	Error    string      `json:"error,omitempty"`
+	Data     string      `json:"data,omitempty"`
+	Tree     *UIElement  `json:"tree,omitempty"`
+	Elements []UIElement `json:"elements,omitempty"`
+}
+
+// UIElement represents an accessibility UI element
+type UIElement struct {
+	Role        string      `json:"role"`
+	Title       string      `json:"title,omitempty"`
+	Value       string      `json:"value,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Bounds      *Bounds     `json:"bounds,omitempty"`
+	Children    []UIElement `json:"children,omitempty"`
+	Actions     []string    `json:"actions,omitempty"`
+}
+
+// Bounds represents the bounding rectangle of a UI element
+type Bounds struct {
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
 }
 
 // NewAgentHID creates a new agent HID controller
@@ -282,4 +304,25 @@ func CombineModifiers(mods ...Modifier) Modifier {
 		result |= m
 	}
 	return result
+}
+
+// Screenshot captures a full screenshot and returns PNG bytes
+func Screenshot() ([]byte, error) {
+	return nil, ErrNotImplemented
+}
+
+// ScreenshotRegion captures a region of the screen and returns PNG bytes
+func ScreenshotRegion(x, y int, width, height uint) ([]byte, error) {
+	return nil, ErrNotImplemented
+}
+
+// GetUITree retrieves the accessibility UI tree from the focused window
+// depth limits traversal depth (0 = unlimited), app targets a specific app (empty = focused)
+func GetUITree(depth int, app string) (*UIElement, error) {
+	return nil, ErrNotImplemented
+}
+
+// FindUIElement finds UI elements matching the given role and/or title
+func FindUIElement(role, title string) ([]UIElement, error) {
+	return nil, ErrNotImplemented
 }

@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#platform-support)
 
-**useHID** lets AI agents control computers like humans do — moving the mouse, typing on the keyboard, and pressing gamepad buttons. Built in Rust with bindings for Python, TypeScript, and Go.
+**useHID** lets AI agents control computers like humans do — moving the mouse, typing on the keyboard, pressing gamepad buttons, taking screenshots, and reading UI elements. Built in Rust with bindings for Python, TypeScript, and Go.
 
 ```python
 from usehid import AgentHID
@@ -26,6 +26,8 @@ agent.execute({"action": "key_press", "key": "enter"})
 - 🖱️ **Virtual Mouse** — Move, click, double-click, drag, scroll
 - ⌨️ **Virtual Keyboard** — Type text, press keys, key combinations
 - 🎮 **Virtual Gamepad** — Joysticks, buttons, triggers
+- 📸 **Screenshot** — Capture full screen or regions as PNG
+- 🌳 **UI Tree / Accessibility** — Read the OS accessibility tree (elements, roles, bounds)
 - 🤖 **Agent-Ready API** — Simple JSON interface for LLM agents
 - 🦀 **Pure Rust Core** — Safe, fast, zero-copy where possible
 - 🐍 **Multi-language** — Python, TypeScript, Go bindings
@@ -46,6 +48,14 @@ agent = AgentHID()
 # Query screen info
 result = agent.execute({"action": "size"})        # Returns: {width: 1920, height: 1080}
 result = agent.execute({"action": "position"})    # Returns: {x: 100, y: 200}
+
+# Screenshot
+result = agent.execute({"action": "screenshot"})  # Returns: {data: "<base64 PNG>"}
+result = agent.execute({"action": "screenshot_region", "x": 0, "y": 0, "width": 400, "height": 300})
+
+# UI Tree (Accessibility)
+result = agent.execute({"action": "get_ui_tree", "depth": 3})  # Returns: {tree: {role, title, children, ...}}
+result = agent.execute({"action": "find_ui_element", "role": "AXButton", "title": "Submit"})
 
 # Mouse actions
 agent.execute({"action": "mouse_move_to", "x": 500, "y": 300})  # Absolute move
@@ -69,6 +79,14 @@ import usehid
 width, height = usehid.size()       # Get screen dimensions
 x, y = usehid.position()            # Get mouse position
 usehid.move_to(500, 300)            # Move mouse to absolute position
+
+# Screenshot
+png_bytes = usehid.screenshot()              # Full screen → PNG bytes
+png_bytes = usehid.screenshot_region(0, 0, 800, 600)  # Region → PNG bytes
+
+# Accessibility / UI Tree
+tree = usehid.get_ui_tree(depth=3)           # Returns dict with role, title, children, bounds...
+elements = usehid.find_ui_element(role="AXButton")  # Find matching elements
 ```
 
 ### Direct Device Control
@@ -99,6 +117,66 @@ keyboard.combo(["cmd"], "s")  # Cmd+S to save
 |--------|------------|---------|-------------|
 | `size` | — | `width`, `height` | Get screen dimensions |
 | `position` | — | `x`, `y` | Get current mouse position |
+
+### Screenshot
+
+| Action | Parameters | Returns | Description |
+|--------|------------|---------|-------------|
+| `screenshot` | — | `data` (base64 PNG) | Capture the full screen |
+| `screenshot_region` | `x`, `y`, `width`, `height` | `data` (base64 PNG) | Capture a screen region |
+
+**Usage:**
+```python
+# Full screen
+result = agent.execute({"action": "screenshot"})
+png_base64 = result["data"]
+
+# Region
+result = agent.execute({"action": "screenshot_region", "x": 100, "y": 100, "width": 400, "height": 300})
+```
+
+**Platform backends:** macOS (CGWindowListCreateImage), Linux (ImageMagick `import`), Windows (GDI BitBlt)
+
+### Accessibility / UI Tree
+
+| Action | Parameters | Returns | Description |
+|--------|------------|---------|-------------|
+| `get_ui_tree` | `depth`?, `app`? | `tree` (UIElement) | Get accessibility tree from focused/named window |
+| `find_ui_element` | `role`?, `title`? | `elements` (UIElement[]) | Find matching elements in the focused window |
+
+**UIElement structure:**
+```json
+{
+  "role": "AXButton",
+  "title": "Submit",
+  "value": null,
+  "description": "Submit the form",
+  "bounds": {"x": 200, "y": 150, "width": 80, "height": 32},
+  "children": [],
+  "actions": ["AXPress"]
+}
+```
+
+**Usage:**
+```python
+# Get full UI tree (depth-limited)
+result = agent.execute({"action": "get_ui_tree", "depth": 3})
+tree = result["tree"]
+
+# Get UI tree for a specific app
+result = agent.execute({"action": "get_ui_tree", "app": "Safari"})
+
+# Find all buttons
+result = agent.execute({"action": "find_ui_element", "role": "AXButton"})
+buttons = result["elements"]
+
+# Find element by title
+result = agent.execute({"action": "find_ui_element", "title": "Save"})
+```
+
+**Platform backends:** macOS (AXUIElement API), Linux (xdotool), Windows (UI Automation)
+
+> ⚠️ Requires **Accessibility** permissions on macOS (System Settings → Privacy & Security → Accessibility)
 
 ### Mouse
 
@@ -186,11 +264,11 @@ agent.execute({"action": "failsafe_enable"})
 
 ## 🖥️ Platform Support
 
-| Platform | Mouse | Keyboard | Gamepad | Backend |
-|----------|:-----:|:--------:|:-------:|---------|
-| **macOS** | ✅ | ✅ | ⚠️ | CGEvent (fallback) / IOHIDUserDevice |
-| **Linux** | ✅ | ✅ | ✅ | uhid (`/dev/uhid`) |
-| **Windows** | ✅ | ✅ | ⚠️ | SendInput API |
+| Platform | Mouse | Keyboard | Gamepad | Screenshot | UI Tree | Backend |
+|----------|:-----:|:--------:|:-------:|:----------:|:-------:|---------|
+| **macOS** | ✅ | ✅ | ⚠️ | ✅ | ✅ | CGEvent / CoreGraphics / AXUIElement |
+| **Linux** | ✅ | ✅ | ✅ | ✅ | ⚠️ | uhid / ImageMagick / xdotool |
+| **Windows** | ✅ | ✅ | ⚠️ | ✅ | ✅ | SendInput / GDI / UI Automation |
 
 > ⚠️ Gamepad notes:
 > - macOS: Requires code signing with `com.apple.developer.hid.virtual.device` entitlement
@@ -198,10 +276,13 @@ agent.execute({"action": "failsafe_enable"})
 
 ### macOS Permissions
 
-useHID uses **CGEvent** by default, which requires **Accessibility** permissions:
+useHID requires **Accessibility** permissions for HID control and UI tree access:
 
-1. Go to **System Preferences → Security & Privacy → Privacy → Accessibility**
+1. Go to **System Settings → Privacy & Security → Accessibility**
 2. Add your terminal app or the application using useHID
+
+> Screenshot capture works without Accessibility permissions.
+> UI Tree / Accessibility features require the permission to read element attributes.
 
 ### Windows
 
@@ -270,28 +351,45 @@ cargo run --release -p usehid --example mouse
 cargo run --release -p usehid --example keyboard
 ```
 
+### Screenshot Capture
+
+```bash
+cargo run --release -p usehid --example screenshot
+```
+
+### UI Tree (Accessibility)
+
+```bash
+cargo run --release -p usehid --example ui_tree
+```
+
 ---
 
 ## 🏗️ Architecture
 
 ```
 usehid/
-├── usehid/          # Rust core library
+├── usehid-core/          # Rust core library
 │   ├── src/
-│   │   ├── lib.rs        # Public API
-│   │   ├── mouse.rs      # Virtual mouse
-│   │   ├── keyboard.rs   # Virtual keyboard
-│   │   ├── gamepad.rs    # Virtual gamepad
-│   │   ├── agent.rs      # JSON API for agents
-│   │   ├── hid.rs        # HID report descriptors
-│   │   └── platform/     # Platform backends
-│   │       ├── macos/    # CGEvent + IOHIDUserDevice
-│   │       ├── linux.rs  # uhid
+│   │   ├── lib.rs            # Public API
+│   │   ├── mouse.rs          # Virtual mouse
+│   │   ├── keyboard.rs       # Virtual keyboard
+│   │   ├── gamepad.rs        # Virtual gamepad
+│   │   ├── screenshot.rs     # Screenshot capture (PNG)
+│   │   ├── accessibility.rs  # UI tree / accessibility API
+│   │   ├── agent.rs          # JSON API for agents
+│   │   ├── screen.rs         # Screen info & mouse position
+│   │   ├── failsafe.rs       # Emergency stop mechanism
+│   │   ├── tween.rs          # Smooth animation functions
+│   │   ├── hid.rs            # HID report descriptors
+│   │   └── platform/         # Platform backends
+│   │       ├── macos/        # CGEvent + IOHIDUserDevice
+│   │       ├── linux.rs      # uhid
 │   │       └── windows.rs
 │   └── examples/
-├── usehid-python/        # Python bindings (PyO3)
-├── usehid-node/          # Node.js bindings (napi-rs)
-└── usehid-go/            # Go bindings (CGO)
+├── usehid-python/            # Python bindings (PyO3)
+├── usehid-node/              # Node.js bindings (napi-rs)
+└── usehid-go/                # Go bindings (CGO)
 ```
 
 ---
@@ -356,6 +454,9 @@ OpenClaw: [executes mouse_scroll multiple times]
 | "Press Enter" | `{"action": "key_press", "key": "enter"}` |
 | "Save the file" | `{"action": "key_combo", "modifiers": ["cmd"], "key": "s"}` |
 | "Scroll down" | `{"action": "mouse_scroll", "delta": -3}` |
+| "Take a screenshot" | `{"action": "screenshot"}` |
+| "What's on screen?" | `{"action": "get_ui_tree", "depth": 2}` |
+| "Find the Submit button" | `{"action": "find_ui_element", "role": "AXButton", "title": "Submit"}` |
 | "Select all and copy" | Two actions: Cmd+A then Cmd+C |
 
 See [skills/usehid/SKILL.md](skills/usehid/SKILL.md) for full documentation.
@@ -385,7 +486,8 @@ See [skills/usehid/SKILL.md](skills/usehid/SKILL.md) for full documentation.
 | **Smooth Tween Animations** | ✅ (10+ functions) | ✅ | ❌ | ❌ | ✅ |
 | **True HID-level Simulation** | ✅ (Linux uhid) | ❌ | ❌ | ❌ | ❌ |
 | **Zero C Dependencies** | ✅ (macOS/Windows) | ❌ | ❌ (libxdo) | ❌ | ❌ (CGO) |
-| **Screenshot** | ❌ | ✅ | ❌ | ✅ | ✅ |
+| **Screenshot** | ✅ | ✅ | ❌ | ✅ | ✅ |
+| **UI Tree / Accessibility** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **Image Recognition** | ❌ | ✅ | ❌ | ❌ | ✅ (OpenCV) |
 | **Window Control** | ❌ | ✅ (Win) | ❌ | ❌ | ✅ |
 

@@ -211,7 +211,64 @@ export type AgentAction =
   | KeyComboAction
   | GamepadPressAction
   | GamepadStickAction
-  | GamepadTriggersAction;
+  | GamepadTriggersAction
+  | ScreenshotAction
+  | ScreenshotRegionAction
+  | GetUiTreeAction
+  | FindUiElementAction;
+
+/**
+ * Screenshot actions
+ */
+export interface ScreenshotAction {
+  action: 'screenshot';
+}
+
+export interface ScreenshotRegionAction {
+  action: 'screenshot_region';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Accessibility actions
+ */
+export interface GetUiTreeAction {
+  action: 'get_ui_tree';
+  depth?: number;
+  app?: string;
+}
+
+export interface FindUiElementAction {
+  action: 'find_ui_element';
+  role?: string;
+  title?: string;
+}
+
+/**
+ * Bounding rectangle for a UI element
+ */
+export interface Bounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * A UI element from the accessibility tree
+ */
+export interface UIElement {
+  role: string;
+  title?: string;
+  value?: string;
+  description?: string;
+  bounds?: Bounds;
+  children: UIElement[];
+  actions?: string[];
+}
 
 /**
  * Result of an agent action
@@ -219,6 +276,9 @@ export type AgentAction =
 export interface AgentResult {
   success: boolean;
   error?: string;
+  data?: string;
+  tree?: UIElement;
+  elements?: UIElement[];
 }
 
 /**
@@ -242,3 +302,23 @@ export class AgentHID {
    */
   close(): void;
 }
+
+/**
+ * Take a full screenshot, returns PNG bytes as Buffer
+ */
+export function screenshot(): Buffer;
+
+/**
+ * Take a screenshot of a region, returns PNG bytes as Buffer
+ */
+export function screenshotRegion(x: number, y: number, width: number, height: number): Buffer;
+
+/**
+ * Get the accessibility UI tree from the focused window
+ */
+export function getUiTree(depth?: number, app?: string): UIElement;
+
+/**
+ * Find UI elements matching role and/or title
+ */
+export function findUiElement(role?: string, title?: string): UIElement[];

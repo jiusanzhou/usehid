@@ -50,6 +50,11 @@ class AgentHID {
   close() {}
 }
 
+function screenshot() { throw new Error('Native module not loaded'); }
+function screenshotRegion(x, y, width, height) { throw new Error('Native module not loaded'); }
+function getUiTree(depth, app) { throw new Error('Native module not loaded'); }
+function findUiElement(role, title) { throw new Error('Native module not loaded'); }
+
 // Try to load native module
 let native;
 try {
@@ -58,4 +63,4 @@ try {
   // Native module not available, use stubs
 }
 
-module.exports = native || { Mouse, Keyboard, Gamepad, AgentHID };
+module.exports = native || { Mouse, Keyboard, Gamepad, AgentHID, screenshot, screenshotRegion, getUiTree, findUiElement };

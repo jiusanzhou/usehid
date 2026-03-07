@@ -38,6 +38,51 @@ fn move_to(x: i32, y: i32) -> PyResult<()> {
         .map_err(|e| PyRuntimeError::new_err(e.to_string()))
 }
 
+/// Take a full screenshot, returns PNG bytes
+#[pyfunction]
+fn screenshot(py: Python<'_>) -> PyResult<Py<pyo3::types::PyBytes>> {
+    let bytes = usehid_crate::screenshot()
+        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    Ok(pyo3::types::PyBytes::new(py, &bytes).unbind())
+}
+
+/// Take a screenshot of a region, returns PNG bytes
+#[pyfunction]
+fn screenshot_region(py: Python<'_>, x: i32, y: i32, width: u32, height: u32) -> PyResult<Py<pyo3::types::PyBytes>> {
+    let bytes = usehid_crate::screenshot_region(x, y, width, height)
+        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    Ok(pyo3::types::PyBytes::new(py, &bytes).unbind())
+}
+
+/// Get the accessibility UI tree
+#[pyfunction]
+#[pyo3(signature = (depth=None, app=None))]
+fn get_ui_tree(py: Python<'_>, depth: Option<u32>, app: Option<&str>) -> PyResult<Py<pyo3::types::PyDict>> {
+    let tree = usehid_crate::get_ui_tree(depth, app)
+        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    let json_str = serde_json::to_string(&tree)
+        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    let json_mod = pyo3::types::PyModule::import(py, "json")?;
+    let dict = json_mod.call_method1("loads", (json_str,))?;
+    Ok(dict.downcast::<pyo3::types::PyDict>()
+        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?
+        .clone()
+        .unbind())
+}
+
+/// Find UI elements matching role and/or title
+#[pyfunction]
+#[pyo3(signature = (role=None, title=None))]
+fn find_ui_element(py: Python<'_>, role: Option<&str>, title: Option<&str>) -> PyResult<PyObject> {
+    let elements = usehid_crate::find_ui_element(role, title)
+        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    let json_str = serde_json::to_string(&elements)
+        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    let json_mod = pyo3::types::PyModule::import(py, "json")?;
+    let list = json_mod.call_method1("loads", (json_str,))?;
+    Ok(list.unbind())
+}
+
 /// Virtual Mouse
 #[pyclass]
 struct Mouse {
@@ -291,17 +336,20 @@ impl AgentHID {
         let json = pyo3::types::PyModule::import(py, "json")?
             .call_method1("dumps", (action,))?
             .extract::<String>()?;
-        
+
         let result = self.inner.execute_json(&json);
-        
-        let dict = pyo3::types::PyDict::new(py);
-        dict.set_item("success", result.success)?;
-        if let Some(err) = result.error {
-            dict.set_item("error", err)?;
-        }
-        Ok(dict.unbind())
+
+        // Serialize via JSON to capture all fields (data, tree, elements, etc.)
+        let result_json = serde_json::to_string(&result)
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        let json_mod = pyo3::types::PyModule::import(py, "json")?;
+        let dict = json_mod.call_method1("loads", (result_json,))?;
+        Ok(dict.downcast::<pyo3::types::PyDict>()
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?
+            .clone()
+            .unbind())
     }
-    
+
     /// Execute action from JSON string
     fn execute_json(&mut self, json: &str) -> PyResult<String> {
         let result = self.inner.execute_json(json);
@@ -320,5 +368,9 @@ fn usehid_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(size, m)?)?;
     m.add_function(wrap_pyfunction!(position, m)?)?;
     m.add_function(wrap_pyfunction!(move_to, m)?)?;
+    m.add_function(wrap_pyfunction!(screenshot, m)?)?;
+    m.add_function(wrap_pyfunction!(screenshot_region, m)?)?;
+    m.add_function(wrap_pyfunction!(get_ui_tree, m)?)?;
+    m.add_function(wrap_pyfunction!(find_ui_element, m)?)?;
     Ok(())
 }

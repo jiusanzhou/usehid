@@ -11,6 +11,8 @@ pub mod gamepad;
 pub mod platform;
 pub mod agent;
 pub mod screen;
+pub mod screenshot;
+pub mod accessibility;
 pub mod tween;
 pub mod failsafe;
 
@@ -20,6 +22,8 @@ pub use mouse::{Mouse, MouseButton};
 pub use gamepad::{Gamepad, GamepadButton};
 pub use agent::AgentHID;
 pub use screen::{size, position, move_to, ScreenSize, Position};
+pub use screenshot::{screenshot, screenshot_region};
+pub use accessibility::{UIElement, Bounds, get_ui_tree, find_ui_element};
 pub use tween::{Tween, TweenAnimation};
 pub use failsafe::{
     FailsafeConfig, FailsafeCorner, FailsafeError, FailsafeGuard,

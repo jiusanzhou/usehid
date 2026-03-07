@@ -21,6 +21,7 @@ tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 bitflags = { version = "2.8", features = ["serde"] }
+base64 = "0.22"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
@@ -28,12 +29,17 @@ io-kit-sys = "0.4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 nix = { version = "0.29", features = ["ioctl", "fs"] }
+png = "0.17"
+x11 = { version = "2.21", features = ["xlib"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+png = "0.17"
 windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_Devices_HumanInterfaceDevice",
     "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Accessibility",
 ] }
 
 [dev-dependencies]
@@ -90,3 +96,7 @@ path = "examples/draw_mouse.rs"
 [[example]]
 name = "drag_drop"
 path = "examples/drag_drop.rs"
+
+[[example]]
+name = "ui_tree"
+path = "examples/ui_tree.rs"

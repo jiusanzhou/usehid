@@ -33,6 +33,12 @@ pub enum Error {
     
     #[error("Failsafe triggered: {0}")]
     FailsafeTriggered(String),
+
+    #[error("Screenshot failed: {0}")]
+    ScreenshotFailed(String),
+
+    #[error("Accessibility failed: {0}")]
+    AccessibilityFailed(String),
     
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
