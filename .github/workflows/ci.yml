@@ -21,13 +21,13 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       
       - name: Build
-        run: cargo build --release -p usehid-core
+        run: cargo build --release -p usehid
 
       - name: Build CLI
         run: cargo build --release -p usehid-cli
 
       - name: Test
-        run: cargo test -p usehid-core
+        run: cargo test -p usehid
 
   build-python:
     name: Build Python wheels
